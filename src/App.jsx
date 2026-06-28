@@ -689,22 +689,38 @@ function AddFoodModal({ onAdd, onClose }) {
   const [pendingFood, setPendingFood] = useState(null); // food waiting for quantity selection
   const [manual, setManual] = useState({ name: "", calories: "", protein: "", carbs: "", fat: "", fiber: "", serving: "1 serving" });
   const [dragOver, setDragOver] = useState(false);
+  const [savedFoodMsg, setSavedFoodMsg] = useState("");
   const fileRef = useRef();
   const debounceRef = useRef();
+
+  // ── My Foods helpers ───────────────────────────────────────────────────────
+  const getMyFoods = () => { try { return JSON.parse(localStorage.getItem("nt_my_foods") || "[]"); } catch { return []; } };
+  const saveToMyFoods = (food) => {
+    const existing = getMyFoods();
+    const key = food.name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 25);
+    if (existing.some(f => f.name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 25) === key)) {
+      setSavedFoodMsg("Already in My Foods ✓"); setTimeout(() => setSavedFoodMsg(""), 2000); return;
+    }
+    const item = { ...food, id: Date.now(), source: "myfood", tags: food.tags || [] };
+    localStorage.setItem("nt_my_foods", JSON.stringify([item, ...existing].slice(0, 200)));
+    setSavedFoodMsg("⭐ Saved to My Foods!"); setTimeout(() => setSavedFoodMsg(""), 2500);
+  };
 
   useEffect(() => {
     clearTimeout(debounceRef.current);
     if (query.length < 2) { setSuggestions([]); return; }
-    // Immediate local results (no debounce)
+    // Immediate local results — My Foods first, then FOOD_DB
     const q = query.toLowerCase();
     const keywords = q.split(/\s+/).filter(k => k.length > 1);
-    const local = FOOD_DB.filter(f => {
+    const matchFn = f => {
       const name = f.name.toLowerCase();
       const tags = (f.tags || []).join(" ");
       return name.includes(q) || tags.includes(q) ||
         keywords.some(kw => name.includes(kw) || tags.includes(kw));
-    }).slice(0, 4);
-    setSuggestions(local.map(f => ({ ...f, source: "database" })));
+    };
+    const mine = getMyFoods().filter(matchFn).slice(0, 3).map(f => ({ ...f, source: "myfood" }));
+    const local = FOOD_DB.filter(matchFn).slice(0, 4);
+    setSuggestions([...mine, ...local.map(f => ({ ...f, source: "database" }))]);
 
     // Debounced: USDA API + AI fallback
     debounceRef.current = setTimeout(async () => {
@@ -820,7 +836,7 @@ function AddFoodModal({ onAdd, onClose }) {
                       <div key={i} className="food-suggestion" onClick={() => selectFood(s)}>
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 500 }}>{s.name}</div>
-                          <div style={{ fontSize: 11, color: C.textMuted }}>{s.serving} · {s.source === "ai" ? "🤖 AI" : s.source === "off" ? "🌍 Open Foods" : "📋 DB"}</div>
+                          <div style={{ fontSize: 11, color: C.textMuted }}>{s.serving} · {s.source === "myfood" ? <span style={{ color: "#f59e0b" }}>⭐ My Foods</span> : s.source === "ai" ? "🤖 AI" : s.source === "off" ? "🌍 Open Foods" : "📋 DB"}</div>
                         </div>
                         <div style={{ textAlign: "right" }}>
                           <div className="mono" style={{ fontSize: 14, color: C.teal }}>{s.calories} kcal</div>
@@ -916,6 +932,9 @@ function AddFoodModal({ onAdd, onClose }) {
                           {aiResult.notes && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 10, borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>{aiResult.notes}</div>}
                         </div>
                         <button className="btn-primary" style={{ width: "100%" }} onClick={() => selectFood(aiResult)}>Set Quantity →</button>
+                        <button className="btn-ghost" style={{ width: "100%", marginTop: 8, color: "#f59e0b", borderColor: "rgba(245,158,11,.3)" }}
+                          onClick={() => saveToMyFoods(aiResult)}>⭐ Save to My Foods</button>
+                        {savedFoodMsg && <div style={{ textAlign: "center", fontSize: 12, color: "#f59e0b", marginTop: 6 }}>{savedFoodMsg}</div>}
                         <button className="btn-ghost" style={{ width: "100%", marginTop: 8 }} onClick={() => { setImagePreview(null); setAiResult(null); }}>Try another photo</button>
                       </div>
                     )}
@@ -936,6 +955,12 @@ function AddFoodModal({ onAdd, onClose }) {
                   <div><label style={{ fontSize: 11, color: "#f97316", display: "block", marginBottom: 4 }}>Fiber (g) 💊</label><input className="input" type="number" placeholder="0" value={manual.fiber} onChange={e => setManual(m => ({ ...m, fiber: e.target.value }))} style={{ borderColor: manual.fiber ? "#f97316" : undefined }} /></div>
                 </div>
                 <button className="btn-primary" onClick={submitManual} disabled={!manual.name || !manual.calories}>Add to Log ✓</button>
+                <button className="btn-ghost" style={{ color: "#f59e0b", borderColor: "rgba(245,158,11,.3)" }}
+                  disabled={!manual.name || !manual.calories}
+                  onClick={() => { if (manual.name && manual.calories) saveToMyFoods({ name: manual.name, calories: +manual.calories||0, protein: +manual.protein||0, carbs: +manual.carbs||0, fat: +manual.fat||0, fiber: +manual.fiber||0, serving: manual.serving }); }}>
+                  ⭐ Save to My Foods
+                </button>
+                {savedFoodMsg && <div style={{ textAlign: "center", fontSize: 12, color: "#f59e0b" }}>{savedFoodMsg}</div>}
               </div>
             )}
           </>
