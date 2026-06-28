@@ -143,6 +143,29 @@ const FOOD_DB = [
   { name: "Banana (1 medium)", calories: 105, protein: 1.3, carbs: 27, fat: 0.4, fiber: 3.1, serving: "1 medium", tags: ["banana","fruit"] },
   { name: "Apple (1 medium)", calories: 95, protein: 0.5, carbs: 25, fat: 0.3, fiber: 4.4, serving: "1 medium", tags: ["apple","fruit"] },
   { name: "Blueberries (100g)", calories: 57, protein: 0.7, carbs: 14, fat: 0.3, fiber: 2.4, serving: "100g", tags: ["blueberries","berries","fruit"] },
+  // ── Protein Supplements ───────────────────────────────────────────────────
+  { name: "Dymatize ISO100 Whey Isolate (1 scoop)", calories: 110, protein: 25, carbs: 2, fat: 0.5, fiber: 0, serving: "1 scoop (31g)", tags: ["iso100","dymatize","isolate","whey","protein","shake","supplement"] },
+  { name: "Quest Protein Bar – Chocolate Chip Cookie Dough", calories: 190, protein: 21, carbs: 25, fat: 8, fiber: 14, serving: "1 bar (60g)", tags: ["quest","protein bar","quest bar","chocolate chip","cookie dough"] },
+  { name: "Quest Protein Bar – Cookies & Cream", calories: 190, protein: 21, carbs: 24, fat: 8, fiber: 14, serving: "1 bar (60g)", tags: ["quest","protein bar","quest bar","cookies cream"] },
+  { name: "Quest Protein Bar – Double Chocolate Chunk", calories: 190, protein: 21, carbs: 23, fat: 9, fiber: 14, serving: "1 bar (60g)", tags: ["quest","protein bar","quest bar","chocolate"] },
+  { name: "Quest Protein Bar – Birthday Cake", calories: 190, protein: 21, carbs: 25, fat: 8, fiber: 13, serving: "1 bar (60g)", tags: ["quest","protein bar","quest bar","birthday cake"] },
+  // ── Almarai Products ──────────────────────────────────────────────────────
+  { name: "Almarai Full Fat Milk (200ml)", calories: 130, protein: 6.4, carbs: 9.6, fat: 7.2, fiber: 0, serving: "200ml", tags: ["almarai","milk","full fat","dairy"] },
+  { name: "Almarai Low Fat Milk (200ml)", calories: 90, protein: 7, carbs: 10, fat: 2.5, fiber: 0, serving: "200ml", tags: ["almarai","milk","low fat","skimmed","dairy"] },
+  { name: "Almarai Skimmed Milk (200ml)", calories: 72, protein: 7, carbs: 10.5, fat: 0.4, fiber: 0, serving: "200ml", tags: ["almarai","milk","skimmed","dairy"] },
+  { name: "Almarai Laban (200ml)", calories: 96, protein: 3.2, carbs: 5, fat: 5, fiber: 0, serving: "200ml", tags: ["almarai","laban","buttermilk","dairy"] },
+  { name: "Almarai Greek Yogurt (150g)", calories: 100, protein: 10, carbs: 8, fat: 2, fiber: 0, serving: "150g", tags: ["almarai","greek yogurt","yogurt","dairy"] },
+  { name: "Almarai Yogurt Plain (150g)", calories: 90, protein: 4.5, carbs: 8, fat: 3.5, fiber: 0, serving: "150g", tags: ["almarai","yogurt","plain","dairy"] },
+  { name: "Almarai Fresh Orange Juice (200ml)", calories: 88, protein: 1.2, carbs: 20, fat: 0.2, fiber: 0.4, serving: "200ml", tags: ["almarai","orange juice","juice","fresh"] },
+  { name: "Almarai Cheddar Cheese (30g)", calories: 114, protein: 7, carbs: 0.5, fat: 9.5, fiber: 0, serving: "30g", tags: ["almarai","cheddar","cheese","dairy"] },
+  { name: "Almarai Cream Cheese (30g)", calories: 90, protein: 2.5, carbs: 1.5, fat: 8.5, fiber: 0, serving: "30g", tags: ["almarai","cream cheese","cheese","dairy"] },
+  { name: "Almarai Butter (10g)", calories: 72, protein: 0.1, carbs: 0, fat: 8, fiber: 0, serving: "10g (1 tbsp)", tags: ["almarai","butter","dairy"] },
+  // ── Nada Products ─────────────────────────────────────────────────────────
+  { name: "Nada Full Fat Milk (200ml)", calories: 128, protein: 6.3, carbs: 9.5, fat: 7, fiber: 0, serving: "200ml", tags: ["nada","milk","full fat","dairy"] },
+  { name: "Nada Low Fat Milk (200ml)", calories: 86, protein: 6.8, carbs: 9.8, fat: 2.2, fiber: 0, serving: "200ml", tags: ["nada","milk","low fat","dairy"] },
+  { name: "Nada Laban (200ml)", calories: 96, protein: 3, carbs: 5, fat: 4.8, fiber: 0, serving: "200ml", tags: ["nada","laban","buttermilk","dairy"] },
+  { name: "Nada Yogurt Plain (150g)", calories: 97, protein: 4, carbs: 12, fat: 3, fiber: 0, serving: "150g", tags: ["nada","yogurt","plain","dairy"] },
+  { name: "Nada Orange Juice (200ml)", calories: 90, protein: 1, carbs: 21, fat: 0, fiber: 0.4, serving: "200ml", tags: ["nada","orange juice","juice"] },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -687,41 +710,49 @@ function AddFoodModal({ onAdd, onClose }) {
     debounceRef.current = setTimeout(async () => {
       setAiLoading(true);
       try {
-        // ── USDA FoodData Central ──────────────────────────────────────────
-        const usdaRes = await fetch(
-          `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(query)}&api_key=DEMO_KEY&pageSize=8&dataType=SR%20Legacy,Foundation,Survey%20(FNDDS),Branded`
-        );
-        const usdaData = await usdaRes.json();
-        const usdaFoods = (usdaData.foods || []).map(food => {
-          const getNutrient = id => food.foodNutrients?.find(n => n.nutrientId === id)?.value || 0;
-          const isBranded = food.dataType === "Branded";
-          const scale = isBranded ? ((food.servingSize || 100) / 100) : 1;
-          const serving = food.householdServingFullText ||
-            (food.servingSize ? `${food.servingSize}${food.servingSizeUnit || "g"}` : "100g");
-          return {
-            name: food.description,
-            calories: Math.round(getNutrient(1008) * scale),
-            protein: Math.round(getNutrient(1003) * scale * 10) / 10,
-            carbs: Math.round(getNutrient(1005) * scale * 10) / 10,
-            fat: Math.round(getNutrient(1004) * scale * 10) / 10,
-            fiber: Math.round(getNutrient(1079) * scale * 10) / 10,
-            serving,
-            source: "usda"
-          };
-        }).filter(f => f.calories > 0).slice(0, 6);
+        // ── Open Food Facts — 3M+ products, international brands ──────────────
+        const offCtrl = new AbortController();
+        const offTimer = setTimeout(() => offCtrl.abort(), 10000);
+        let offFoods = [];
+        try {
+          const offRes = await fetch(
+            `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&json=1&page_size=8&search_simple=1&action=process&fields=product_name,brands,serving_size,nutriments`,
+            { signal: offCtrl.signal }
+          );
+          clearTimeout(offTimer);
+          const offData = await offRes.json();
+          offFoods = (offData.products || []).map(p => {
+            const n = p.nutriments || {};
+            const servingG = parseFloat(p.serving_size) || 100;
+            const scale = servingG / 100;
+            const cal100 = n["energy-kcal_100g"] || n["energy-kcal"] || 0;
+            if (!cal100) return null;
+            const brand = p.brands ? `(${p.brands.split(",")[0].trim()}) ` : "";
+            return {
+              name: `${p.product_name || "Unknown"} ${brand}`.trim(),
+              calories: Math.round(cal100 * scale),
+              protein: Math.round((n["proteins_100g"] || 0) * scale * 10) / 10,
+              carbs: Math.round((n["carbohydrates_100g"] || 0) * scale * 10) / 10,
+              fat: Math.round((n["fat_100g"] || 0) * scale * 10) / 10,
+              fiber: Math.round((n["fiber_100g"] || 0) * scale * 10) / 10,
+              serving: p.serving_size || "100g",
+              source: "off"
+            };
+          }).filter(Boolean).filter(f => f.calories > 0 && f.name.length > 1).slice(0, 6);
+        } catch { clearTimeout(offTimer); }
 
         setSuggestions(prev => {
-          const combined = [...prev, ...usdaFoods];
+          const combined = [...prev, ...offFoods];
           const seen = new Set();
           return combined.filter(f => {
-            const key = f.name.toLowerCase().slice(0, 25);
+            const key = f.name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20);
             if (seen.has(key)) return false;
             seen.add(key); return true;
           }).slice(0, 8);
         });
 
-        // ── AI fallback only if USDA + local both thin ─────────────────────
-        if (usdaFoods.length < 2 && local.length < 2 && query.length > 3) {
+        // ── AI fallback only if Open Food Facts + local both thin ──────────
+        if (offFoods.length < 2 && local.length < 2 && query.length > 3) {
           const r = await analyzeFood(`Food item: "${query}". Accurate nutritional info per standard serving.`);
           if (r) setSuggestions(prev => [{ ...r, source: "ai" }, ...prev].slice(0, 8));
         }
@@ -789,7 +820,7 @@ function AddFoodModal({ onAdd, onClose }) {
                       <div key={i} className="food-suggestion" onClick={() => selectFood(s)}>
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 500 }}>{s.name}</div>
-                          <div style={{ fontSize: 11, color: C.textMuted }}>{s.serving} · {s.source === "ai" ? "🤖 AI" : s.source === "usda" ? "🏛 USDA" : "📋 DB"}</div>
+                          <div style={{ fontSize: 11, color: C.textMuted }}>{s.serving} · {s.source === "ai" ? "🤖 AI" : s.source === "off" ? "🌍 Open Foods" : "📋 DB"}</div>
                         </div>
                         <div style={{ textAlign: "right" }}>
                           <div className="mono" style={{ fontSize: 14, color: C.teal }}>{s.calories} kcal</div>
