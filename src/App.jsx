@@ -672,25 +672,61 @@ function AddFoodModal({ onAdd, onClose }) {
   useEffect(() => {
     clearTimeout(debounceRef.current);
     if (query.length < 2) { setSuggestions([]); return; }
+    // Immediate local results (no debounce)
+    const q = query.toLowerCase();
+    const keywords = q.split(/\s+/).filter(k => k.length > 1);
+    const local = FOOD_DB.filter(f => {
+      const name = f.name.toLowerCase();
+      const tags = (f.tags || []).join(" ");
+      return name.includes(q) || tags.includes(q) ||
+        keywords.some(kw => name.includes(kw) || tags.includes(kw));
+    }).slice(0, 4);
+    setSuggestions(local.map(f => ({ ...f, source: "database" })));
+
+    // Debounced: USDA API + AI fallback
     debounceRef.current = setTimeout(async () => {
-      const q = query.toLowerCase();
-      const keywords = q.split(/\s+/).filter(k => k.length > 1);
-      const local = FOOD_DB.filter(f => {
-        const name = f.name.toLowerCase();
-        const tags = (f.tags || []).join(" ");
-        // Match if the full query or ANY keyword appears in name or tags
-        return name.includes(q) || tags.includes(q) ||
-          keywords.some(kw => name.includes(kw) || tags.includes(kw));
-      }).slice(0, 6);
-      setSuggestions(local.map(f => ({ ...f, source: "database" })));
-      if (local.length < 3 && query.length > 3) {
-        setAiLoading(true);
-        try {
+      setAiLoading(true);
+      try {
+        // ── USDA FoodData Central ──────────────────────────────────────────
+        const usdaRes = await fetch(
+          `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(query)}&api_key=DEMO_KEY&pageSize=8&dataType=SR%20Legacy,Foundation,Survey%20(FNDDS),Branded`
+        );
+        const usdaData = await usdaRes.json();
+        const usdaFoods = (usdaData.foods || []).map(food => {
+          const getNutrient = id => food.foodNutrients?.find(n => n.nutrientId === id)?.value || 0;
+          const isBranded = food.dataType === "Branded";
+          const scale = isBranded ? ((food.servingSize || 100) / 100) : 1;
+          const serving = food.householdServingFullText ||
+            (food.servingSize ? `${food.servingSize}${food.servingSizeUnit || "g"}` : "100g");
+          return {
+            name: food.description,
+            calories: Math.round(getNutrient(1008) * scale),
+            protein: Math.round(getNutrient(1003) * scale * 10) / 10,
+            carbs: Math.round(getNutrient(1005) * scale * 10) / 10,
+            fat: Math.round(getNutrient(1004) * scale * 10) / 10,
+            fiber: Math.round(getNutrient(1079) * scale * 10) / 10,
+            serving,
+            source: "usda"
+          };
+        }).filter(f => f.calories > 0).slice(0, 6);
+
+        setSuggestions(prev => {
+          const combined = [...prev, ...usdaFoods];
+          const seen = new Set();
+          return combined.filter(f => {
+            const key = f.name.toLowerCase().slice(0, 25);
+            if (seen.has(key)) return false;
+            seen.add(key); return true;
+          }).slice(0, 8);
+        });
+
+        // ── AI fallback only if USDA + local both thin ─────────────────────
+        if (usdaFoods.length < 2 && local.length < 2 && query.length > 3) {
           const r = await analyzeFood(`Food item: "${query}". Accurate nutritional info per standard serving.`);
-          if (r) setSuggestions(prev => [{ ...r, source: "ai" }, ...prev].slice(0, 6));
-        } catch {}
-        setAiLoading(false);
-      }
+          if (r) setSuggestions(prev => [{ ...r, source: "ai" }, ...prev].slice(0, 8));
+        }
+      } catch {}
+      setAiLoading(false);
     }, 500);
   }, [query]);
 
@@ -753,7 +789,7 @@ function AddFoodModal({ onAdd, onClose }) {
                       <div key={i} className="food-suggestion" onClick={() => selectFood(s)}>
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 500 }}>{s.name}</div>
-                          <div style={{ fontSize: 11, color: C.textMuted }}>{s.serving} · {s.source === "ai" ? "🤖 AI" : "📋 DB"}</div>
+                          <div style={{ fontSize: 11, color: C.textMuted }}>{s.serving} · {s.source === "ai" ? "🤖 AI" : s.source === "usda" ? "🏛 USDA" : "📋 DB"}</div>
                         </div>
                         <div style={{ textAlign: "right" }}>
                           <div className="mono" style={{ fontSize: 14, color: C.teal }}>{s.calories} kcal</div>
