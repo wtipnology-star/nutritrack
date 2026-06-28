@@ -92,20 +92,57 @@ const css = `
 
 // ── Food Database ─────────────────────────────────────────────────────────────
 const FOOD_DB = [
-  { name: "Chicken Breast (100g)", calories: 165, protein: 31, carbs: 0, fat: 3.6, fiber: 0, serving: "100g" },
-  { name: "Eggs (1 large)", calories: 72, protein: 6, carbs: 0.4, fat: 5, fiber: 0, serving: "1 egg" },
-  { name: "Greek Yogurt (200g)", calories: 130, protein: 22, carbs: 9, fat: 0.7, fiber: 0, serving: "200g" },
-  { name: "Salmon (100g)", calories: 208, protein: 20, carbs: 0, fat: 13, fiber: 0, serving: "100g" },
-  { name: "Tuna in water (1 can)", calories: 120, protein: 28, carbs: 0, fat: 0.5, fiber: 0, serving: "1 can" },
-  { name: "Cottage Cheese (100g)", calories: 98, protein: 11, carbs: 3.4, fat: 4.3, fiber: 0, serving: "100g" },
-  { name: "Whey Protein Shake", calories: 120, protein: 24, carbs: 3, fat: 1.5, fiber: 1, serving: "1 scoop" },
-  { name: "Almonds (30g)", calories: 173, protein: 6, carbs: 6, fat: 15, fiber: 3.5, serving: "30g" },
-  { name: "Brown Rice (100g cooked)", calories: 216, protein: 5, carbs: 45, fat: 1.8, fiber: 1.8, serving: "100g cooked" },
-  { name: "Oats (50g dry)", calories: 190, protein: 6.5, carbs: 33, fat: 3.5, fiber: 5, serving: "50g dry" },
-  { name: "Banana (1 medium)", calories: 105, protein: 1.3, carbs: 27, fat: 0.4, fiber: 3.1, serving: "1 medium" },
-  { name: "Whole Milk (200ml)", calories: 122, protein: 6.4, carbs: 9.6, fat: 6.4, fiber: 0, serving: "200ml" },
-  { name: "Lentils (100g cooked)", calories: 116, protein: 9, carbs: 20, fat: 0.4, fiber: 7.9, serving: "100g cooked" },
-  { name: "Beef (100g lean)", calories: 215, protein: 26, carbs: 0, fat: 12, fiber: 0, serving: "100g" },
+  // ── Eggs ──────────────────────────────────────────────────────────────────
+  { name: "Egg (1 large, whole)", calories: 72, protein: 6, carbs: 0.4, fat: 5, fiber: 0, serving: "1 egg", tags: ["eggs","egg","boiled","raw","poached"] },
+  { name: "Boiled Egg (1 large)", calories: 78, protein: 6.3, carbs: 0.6, fat: 5.3, fiber: 0, serving: "1 egg", tags: ["eggs","egg","boiled","hard boiled","soft boiled"] },
+  { name: "Scrambled Eggs (2 eggs)", calories: 182, protein: 12, carbs: 2, fat: 13, fiber: 0, serving: "2 eggs cooked", tags: ["eggs","egg","scrambled"] },
+  { name: "Fried Egg (1 large)", calories: 90, protein: 6.3, carbs: 0.4, fat: 7, fiber: 0, serving: "1 egg", tags: ["eggs","egg","fried"] },
+  { name: "Omelet (2 eggs, plain)", calories: 185, protein: 13, carbs: 1, fat: 14, fiber: 0, serving: "2-egg omelet", tags: ["eggs","egg","omelet","omelette"] },
+  { name: "Omelet with cheese (2 eggs)", calories: 250, protein: 16, carbs: 2, fat: 19, fiber: 0, serving: "2-egg omelet + cheese", tags: ["eggs","egg","omelet","omelette","cheese"] },
+  { name: "Egg White (1 large)", calories: 17, protein: 3.6, carbs: 0.2, fat: 0.1, fiber: 0, serving: "1 egg white", tags: ["eggs","egg","white"] },
+  { name: "Poached Egg (1 large)", calories: 72, protein: 6, carbs: 0.4, fat: 5, fiber: 0, serving: "1 egg", tags: ["eggs","egg","poached"] },
+  // ── Chicken ───────────────────────────────────────────────────────────────
+  { name: "Chicken Breast (100g)", calories: 165, protein: 31, carbs: 0, fat: 3.6, fiber: 0, serving: "100g", tags: ["chicken","breast","grilled","baked"] },
+  { name: "Grilled Chicken Breast (100g)", calories: 165, protein: 31, carbs: 0, fat: 3.6, fiber: 0, serving: "100g", tags: ["chicken","breast","grilled"] },
+  { name: "Chicken Thigh (100g)", calories: 209, protein: 26, carbs: 0, fat: 11, fiber: 0, serving: "100g", tags: ["chicken","thigh"] },
+  { name: "Rotisserie Chicken (100g)", calories: 190, protein: 28, carbs: 0, fat: 9, fiber: 0, serving: "100g", tags: ["chicken","rotisserie"] },
+  // ── Fish & Seafood ────────────────────────────────────────────────────────
+  { name: "Salmon (100g)", calories: 208, protein: 20, carbs: 0, fat: 13, fiber: 0, serving: "100g", tags: ["fish","salmon"] },
+  { name: "Tuna in water (1 can)", calories: 120, protein: 28, carbs: 0, fat: 0.5, fiber: 0, serving: "1 can ~140g", tags: ["fish","tuna","can"] },
+  { name: "Shrimp (100g)", calories: 85, protein: 18, carbs: 0.9, fat: 1, fiber: 0, serving: "100g", tags: ["shrimp","seafood"] },
+  // ── Dairy ─────────────────────────────────────────────────────────────────
+  { name: "Greek Yogurt (200g)", calories: 130, protein: 22, carbs: 9, fat: 0.7, fiber: 0, serving: "200g", tags: ["yogurt","greek","dairy"] },
+  { name: "Cottage Cheese (100g)", calories: 98, protein: 11, carbs: 3.4, fat: 4.3, fiber: 0, serving: "100g", tags: ["cottage","cheese","dairy"] },
+  { name: "Whole Milk (200ml)", calories: 122, protein: 6.4, carbs: 9.6, fat: 6.4, fiber: 0, serving: "200ml", tags: ["milk","dairy"] },
+  { name: "Cheddar Cheese (30g)", calories: 120, protein: 7.4, carbs: 0.4, fat: 9.9, fiber: 0, serving: "30g", tags: ["cheese","cheddar","dairy"] },
+  { name: "Whey Protein Shake", calories: 120, protein: 24, carbs: 3, fat: 1.5, fiber: 1, serving: "1 scoop", tags: ["protein","whey","shake","supplement"] },
+  // ── Red Meat ──────────────────────────────────────────────────────────────
+  { name: "Beef (100g lean)", calories: 215, protein: 26, carbs: 0, fat: 12, fiber: 0, serving: "100g", tags: ["beef","meat","steak"] },
+  { name: "Ground Beef 80/20 (100g)", calories: 254, protein: 17, carbs: 0, fat: 20, fiber: 0, serving: "100g cooked", tags: ["beef","ground","burger","meat"] },
+  { name: "Turkey Breast (100g)", calories: 135, protein: 30, carbs: 0, fat: 1, fiber: 0, serving: "100g", tags: ["turkey","breast","meat"] },
+  // ── Grains & Carbs ────────────────────────────────────────────────────────
+  { name: "Brown Rice (100g cooked)", calories: 216, protein: 5, carbs: 45, fat: 1.8, fiber: 1.8, serving: "100g cooked", tags: ["rice","brown","grain"] },
+  { name: "White Rice (100g cooked)", calories: 206, protein: 4.3, carbs: 44, fat: 0.4, fiber: 0.6, serving: "100g cooked", tags: ["rice","white","grain"] },
+  { name: "Oats (50g dry)", calories: 190, protein: 6.5, carbs: 33, fat: 3.5, fiber: 5, serving: "50g dry", tags: ["oats","oatmeal","porridge"] },
+  { name: "Whole Wheat Bread (1 slice)", calories: 80, protein: 4, carbs: 14, fat: 1, fiber: 2, serving: "1 slice ~30g", tags: ["bread","wheat","toast"] },
+  { name: "Pasta (100g cooked)", calories: 158, protein: 5.8, carbs: 31, fat: 0.9, fiber: 1.8, serving: "100g cooked", tags: ["pasta","noodles"] },
+  // ── Legumes ───────────────────────────────────────────────────────────────
+  { name: "Lentils (100g cooked)", calories: 116, protein: 9, carbs: 20, fat: 0.4, fiber: 7.9, serving: "100g cooked", tags: ["lentils","legumes"] },
+  { name: "Chickpeas (100g cooked)", calories: 164, protein: 8.9, carbs: 27, fat: 2.6, fiber: 7.6, serving: "100g cooked", tags: ["chickpeas","hummus","legumes"] },
+  { name: "Black Beans (100g cooked)", calories: 132, protein: 8.9, carbs: 24, fat: 0.5, fiber: 8.7, serving: "100g cooked", tags: ["beans","black","legumes"] },
+  // ── Nuts & Seeds ──────────────────────────────────────────────────────────
+  { name: "Almonds (30g)", calories: 173, protein: 6, carbs: 6, fat: 15, fiber: 3.5, serving: "30g", tags: ["almonds","nuts"] },
+  { name: "Peanut Butter (2 tbsp)", calories: 190, protein: 8, carbs: 6, fat: 16, fiber: 2, serving: "2 tbsp ~32g", tags: ["peanut","butter","nuts"] },
+  { name: "Walnuts (30g)", calories: 196, protein: 4.6, carbs: 4.1, fat: 19.6, fiber: 2, serving: "30g", tags: ["walnuts","nuts"] },
+  // ── Vegetables ────────────────────────────────────────────────────────────
+  { name: "Broccoli (100g)", calories: 34, protein: 2.8, carbs: 7, fat: 0.4, fiber: 2.6, serving: "100g", tags: ["broccoli","vegetable"] },
+  { name: "Spinach (100g)", calories: 23, protein: 2.9, carbs: 3.6, fat: 0.4, fiber: 2.2, serving: "100g", tags: ["spinach","greens","vegetable"] },
+  { name: "Avocado (half)", calories: 160, protein: 2, carbs: 8.6, fat: 14.7, fiber: 6.7, serving: "half ~100g", tags: ["avocado"] },
+  { name: "Sweet Potato (100g)", calories: 86, protein: 1.6, carbs: 20, fat: 0.1, fiber: 3, serving: "100g", tags: ["sweet potato","potato","vegetable"] },
+  // ── Fruit ─────────────────────────────────────────────────────────────────
+  { name: "Banana (1 medium)", calories: 105, protein: 1.3, carbs: 27, fat: 0.4, fiber: 3.1, serving: "1 medium", tags: ["banana","fruit"] },
+  { name: "Apple (1 medium)", calories: 95, protein: 0.5, carbs: 25, fat: 0.3, fiber: 4.4, serving: "1 medium", tags: ["apple","fruit"] },
+  { name: "Blueberries (100g)", calories: 57, protein: 0.7, carbs: 14, fat: 0.3, fiber: 2.4, serving: "100g", tags: ["blueberries","berries","fruit"] },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -636,7 +673,15 @@ function AddFoodModal({ onAdd, onClose }) {
     clearTimeout(debounceRef.current);
     if (query.length < 2) { setSuggestions([]); return; }
     debounceRef.current = setTimeout(async () => {
-      const local = FOOD_DB.filter(f => f.name.toLowerCase().includes(query.toLowerCase())).slice(0, 5);
+      const q = query.toLowerCase();
+      const keywords = q.split(/\s+/).filter(k => k.length > 1);
+      const local = FOOD_DB.filter(f => {
+        const name = f.name.toLowerCase();
+        const tags = (f.tags || []).join(" ");
+        // Match if the full query or ANY keyword appears in name or tags
+        return name.includes(q) || tags.includes(q) ||
+          keywords.some(kw => name.includes(kw) || tags.includes(kw));
+      }).slice(0, 6);
       setSuggestions(local.map(f => ({ ...f, source: "database" })));
       if (local.length < 3 && query.length > 3) {
         setAiLoading(true);
