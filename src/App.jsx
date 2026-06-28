@@ -276,7 +276,11 @@ function calcProfileTargets(w, h, a, sex, activity, deficit, onMounjaro) {
   };
 }
 
+function getClaudeKey() { return localStorage.getItem("nt_claude_key") || ""; }
+
 async function analyzeFood(prompt, imageBase64) {
+  const key = getClaudeKey();
+  if (!key) throw new Error("NO_KEY");
   const content = imageBase64
     ? [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: imageBase64 } }, { type: "text", text: prompt }]
     : prompt;
@@ -285,9 +289,15 @@ Format: {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"serv
 All numbers are per serving. Protein/carbs/fat/fiber in grams. Always include fiber even if 0.`;
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, system: sys, messages: [{ role: "user", content }] }),
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1000, system: sys, messages: [{ role: "user", content }] }),
   });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `API error ${res.status}`); }
   const data = await res.json();
   const text = data.content.map(b => b.text || "").join("");
   try { return JSON.parse(text.replace(/```json|```/g, "").trim()); } catch { return null; }
@@ -435,7 +445,9 @@ function useGoogleFit() {
 function SetupScreen({ onComplete }) {
   const [step, setStep] = useState(0);
   const [f, setF] = useState({ name: "", weight: "", height: "", age: "", sex: "male", activity: "sedentary", onMounjaro: true, mounjaroStartDate: "", targetCalorieDeficit: "500" });
+  const [claudeKey, setClaudeKey] = useState(() => localStorage.getItem("nt_claude_key") || "");
   const up = (k, v) => setF(prev => ({ ...prev, [k]: v }));
+  const saveKey = (v) => { setClaudeKey(v); localStorage.setItem("nt_claude_key", v.trim()); };
 
   const getTargets = () => calcProfileTargets(parseFloat(f.weight), parseFloat(f.height), parseFloat(f.age), f.sex, f.activity, f.targetCalorieDeficit, f.onMounjaro);
 
@@ -575,6 +587,37 @@ function SetupScreen({ onComplete }) {
       })(),
       canNext: () => true,
     },
+    {
+      title: "Claude API Key", subtitle: "Powers photo scanning & AI chat",
+      content: (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ padding: "12px 14px", background: "rgba(20,184,166,.06)", border: "1px solid rgba(20,184,166,.2)", borderRadius: 10, fontSize: 12, lineHeight: 1.8, color: C.textMuted }}>
+            🤖 NutriTrack uses Claude AI to:<br/>
+            • <strong style={{ color: C.text }}>Scan nutrition labels</strong> from photos<br/>
+            • <strong style={{ color: C.text }}>AI chat</strong> for personalised advice<br/>
+            • <strong style={{ color: C.text }}>Look up foods</strong> not in the database
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 6 }}>
+              Your Claude API Key <span style={{ color: C.textDim }}>(stored only on this device)</span>
+            </label>
+            <input className="input" type="password" placeholder="sk-ant-api03-…"
+              value={claudeKey} onChange={e => saveKey(e.target.value)} />
+            {claudeKey && claudeKey.startsWith("sk-ant-") && (
+              <div style={{ fontSize: 11, color: C.teal, marginTop: 6 }}>✓ Key format looks correct</div>
+            )}
+            {claudeKey && !claudeKey.startsWith("sk-ant-") && (
+              <div style={{ fontSize: 11, color: C.amber, marginTop: 6 }}>⚠️ Keys usually start with sk-ant-</div>
+            )}
+          </div>
+          <div style={{ padding: "10px 12px", background: C.bg, borderRadius: 8, fontSize: 11, color: C.textDim, lineHeight: 1.7 }}>
+            Get a free key at <strong style={{ color: C.teal }}>console.anthropic.com</strong> → API Keys.<br/>
+            You can skip this and add it later from Settings.
+          </div>
+        </div>
+      ),
+      canNext: () => true,
+    },
   ];
 
   const cur = steps[step];
@@ -685,6 +728,7 @@ function AddFoodModal({ onAdd, onClose }) {
   const [suggestions, setSuggestions] = useState([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState(null);
+  const [aiError, setAiError] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [pendingFood, setPendingFood] = useState(null); // food waiting for quantity selection
   const [manual, setManual] = useState({ name: "", calories: "", protein: "", carbs: "", fat: "", fiber: "", serving: "1 serving" });
@@ -778,6 +822,8 @@ function AddFoodModal({ onAdd, onClose }) {
   }, [query]);
 
   const handleImage = async (file) => {
+    setAiError(null);
+    setAiResult(null);
     const reader = new FileReader();
     reader.onload = async e => {
       const b64 = e.target.result.split(",")[1];
@@ -786,7 +832,15 @@ function AddFoodModal({ onAdd, onClose }) {
       try {
         const r = await analyzeFood("Analyze this food/product image. Identify the exact product if packaged (read the label). Return accurate nutritional info per serving.", b64);
         if (r) setAiResult(r);
-      } catch {}
+        else setAiError("Couldn't read nutrition info from this image. Try a clearer photo of the label.");
+      } catch (err) {
+        if (err.message === "NO_KEY") {
+          setAiError("NO_KEY");
+        } else {
+          setAiError("API error: " + err.message + ". Check your Claude API key in Settings.");
+        }
+        setImagePreview(null);
+      }
       setAiLoading(false);
     };
     reader.readAsDataURL(file);
@@ -854,6 +908,20 @@ function AddFoodModal({ onAdd, onClose }) {
 
             {tab === "photo" && (
               <div>
+                {/* No API key warning */}
+                {!getClaudeKey() && (
+                  <div style={{ marginBottom: 14, padding: "12px 14px", background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.3)", borderRadius: 10, fontSize: 12, lineHeight: 1.7, color: C.textMuted }}>
+                    ⚠️ <strong style={{ color: C.red }}>Claude API key required</strong> for photo analysis.<br/>
+                    Go to <strong>Settings</strong> (⚙ top-right) → add your API key. Get one free at{" "}
+                    <span style={{ color: C.teal }}>console.anthropic.com</span>.
+                  </div>
+                )}
+                {/* API / analysis error */}
+                {aiError && aiError !== "NO_KEY" && (
+                  <div style={{ marginBottom: 14, padding: "12px 14px", background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.3)", borderRadius: 10, fontSize: 12, color: C.red }}>
+                    ❌ {aiError}
+                  </div>
+                )}
                 {!imagePreview ? (
                   <div>
                     {/* Two explicit buttons — more reliable than hidden input in sandboxed iframe */}
@@ -935,7 +1003,7 @@ function AddFoodModal({ onAdd, onClose }) {
                         <button className="btn-ghost" style={{ width: "100%", marginTop: 8, color: "#f59e0b", borderColor: "rgba(245,158,11,.3)" }}
                           onClick={() => saveToMyFoods(aiResult)}>⭐ Save to My Foods</button>
                         {savedFoodMsg && <div style={{ textAlign: "center", fontSize: 12, color: "#f59e0b", marginTop: 6 }}>{savedFoodMsg}</div>}
-                        <button className="btn-ghost" style={{ width: "100%", marginTop: 8 }} onClick={() => { setImagePreview(null); setAiResult(null); }}>Try another photo</button>
+                        <button className="btn-ghost" style={{ width: "100%", marginTop: 8 }} onClick={() => { setImagePreview(null); setAiResult(null); setAiError(null); }}>Try another photo</button>
                       </div>
                     )}
                   </div>
@@ -1167,9 +1235,14 @@ ${todayFoodSummary}
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": getClaudeKey(),
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
+          model: "claude-haiku-4-5-20251001",
           max_tokens: 1000,
           system: buildSystemPrompt(),
           messages: newMessages.map(m => ({ role: m.role, content: m.content })),
@@ -1401,7 +1474,10 @@ export default function App() {
               {profile.onMounjaro && <span style={{ color: C.purple, marginLeft: 8 }}>· Week {getMounjaroWeek(profile.mounjaroStartDate)} 💉</span>}
             </div>
           </div>
-          <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 10px" }} onClick={() => setProfile(null)}>⚙ Settings</button>
+          <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 10px", borderColor: !getClaudeKey() ? "rgba(245,158,11,.5)" : undefined, color: !getClaudeKey() ? C.amber : undefined }}
+            onClick={() => setProfile(null)}>
+            {!getClaudeKey() ? "🔑 Add API Key" : "⚙ Settings"}
+          </button>
         </div>
 
         {/* Tabs */}
