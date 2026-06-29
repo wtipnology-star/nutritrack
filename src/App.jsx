@@ -139,10 +139,29 @@ const FOOD_DB = [
   { name: "Spinach (100g)", calories: 23, protein: 2.9, carbs: 3.6, fat: 0.4, fiber: 2.2, serving: "100g", tags: ["spinach","greens","vegetable"] },
   { name: "Avocado (half)", calories: 160, protein: 2, carbs: 8.6, fat: 14.7, fiber: 6.7, serving: "half ~100g", tags: ["avocado"] },
   { name: "Sweet Potato (100g)", calories: 86, protein: 1.6, carbs: 20, fat: 0.1, fiber: 3, serving: "100g", tags: ["sweet potato","potato","vegetable"] },
+  // ── Vegetables ────────────────────────────────────────────────────────────
+  { name: "Cucumber (100g)", calories: 15, protein: 0.7, carbs: 3.6, fat: 0.1, fiber: 0.5, serving: "100g", tags: ["cucumber","vegetable","veg","salad"] },
+  { name: "Tomato (1 medium)", calories: 22, protein: 1.1, carbs: 4.8, fat: 0.2, fiber: 1.5, serving: "1 medium (123g)", tags: ["tomato","tomatoes","vegetable","salad"] },
+  { name: "Lettuce / Mixed Greens (100g)", calories: 15, protein: 1.4, carbs: 2.2, fat: 0.2, fiber: 1.3, serving: "100g", tags: ["lettuce","salad","greens","mixed greens","leaves"] },
+  { name: "Spinach (100g raw)", calories: 23, protein: 2.9, carbs: 3.6, fat: 0.4, fiber: 2.2, serving: "100g", tags: ["spinach","vegetable","greens","salad"] },
+  { name: "Broccoli (100g)", calories: 34, protein: 2.8, carbs: 7, fat: 0.4, fiber: 2.6, serving: "100g", tags: ["broccoli","vegetable","veg"] },
+  { name: "Zucchini / Courgette (100g)", calories: 17, protein: 1.2, carbs: 3.1, fat: 0.3, fiber: 1, serving: "100g", tags: ["zucchini","courgette","vegetable","veg"] },
+  { name: "Bell Pepper (1 medium)", calories: 31, protein: 1, carbs: 7.6, fat: 0.3, fiber: 2.5, serving: "1 medium (119g)", tags: ["bell pepper","pepper","capsicum","vegetable"] },
+  { name: "Carrot (1 medium)", calories: 25, protein: 0.6, carbs: 5.8, fat: 0.1, fiber: 1.7, serving: "1 medium (61g)", tags: ["carrot","carrots","vegetable"] },
+  { name: "Onion (1 medium)", calories: 44, protein: 1.2, carbs: 10.3, fat: 0.1, fiber: 1.9, serving: "1 medium (110g)", tags: ["onion","onions","vegetable"] },
+  { name: "Garlic (1 clove)", calories: 4, protein: 0.2, carbs: 1, fat: 0, fiber: 0.1, serving: "1 clove (3g)", tags: ["garlic","clove","vegetable"] },
+  { name: "Mushrooms (100g)", calories: 22, protein: 3.1, carbs: 3.3, fat: 0.3, fiber: 1, serving: "100g", tags: ["mushroom","mushrooms","vegetable"] },
+  { name: "Avocado (½ fruit)", calories: 120, protein: 1.5, carbs: 6.4, fat: 11, fiber: 5, serving: "½ avocado (68g)", tags: ["avocado","avo","fruit","healthy fat"] },
+  { name: "Sweet Potato (1 medium, baked)", calories: 103, protein: 2.3, carbs: 24, fat: 0.1, fiber: 3.8, serving: "1 medium (130g)", tags: ["sweet potato","yam","vegetable","carbs"] },
+  { name: "Potato (1 medium, boiled)", calories: 87, protein: 1.9, carbs: 20, fat: 0.1, fiber: 1.8, serving: "1 medium (136g)", tags: ["potato","potatoes","boiled potato","vegetable","carbs"] },
   // ── Fruit ─────────────────────────────────────────────────────────────────
   { name: "Banana (1 medium)", calories: 105, protein: 1.3, carbs: 27, fat: 0.4, fiber: 3.1, serving: "1 medium", tags: ["banana","fruit"] },
   { name: "Apple (1 medium)", calories: 95, protein: 0.5, carbs: 25, fat: 0.3, fiber: 4.4, serving: "1 medium", tags: ["apple","fruit"] },
   { name: "Blueberries (100g)", calories: 57, protein: 0.7, carbs: 14, fat: 0.3, fiber: 2.4, serving: "100g", tags: ["blueberries","berries","fruit"] },
+  { name: "Orange (1 medium)", calories: 62, protein: 1.2, carbs: 15.4, fat: 0.2, fiber: 3.1, serving: "1 medium (131g)", tags: ["orange","fruit","citrus"] },
+  { name: "Strawberries (100g)", calories: 32, protein: 0.7, carbs: 7.7, fat: 0.3, fiber: 2, serving: "100g", tags: ["strawberry","strawberries","berries","fruit"] },
+  { name: "Watermelon (200g)", calories: 60, protein: 1.2, carbs: 15.2, fat: 0.2, fiber: 0.8, serving: "200g (2 cups)", tags: ["watermelon","fruit","melon"] },
+  { name: "Dates (3 dates)", calories: 69, protein: 0.6, carbs: 18.4, fat: 0, fiber: 1.9, serving: "3 dates (36g)", tags: ["dates","date","fruit","dried fruit"] },
   // ── Protein Supplements ───────────────────────────────────────────────────
   { name: "Dymatize ISO100 Whey Isolate (1 scoop)", calories: 110, protein: 25, carbs: 2, fat: 0.5, fiber: 0, serving: "1 scoop (31g)", tags: ["iso100","dymatize","isolate","whey","protein","shake","supplement"] },
   { name: "Quest Protein Bar – Chocolate Chip Cookie Dough", calories: 190, protein: 21, carbs: 25, fat: 8, fiber: 14, serving: "1 bar (60g)", tags: ["quest","protein bar","quest bar","chocolate chip","cookie dough"] },
@@ -792,55 +811,53 @@ function AddFoodModal({ onAdd, onClose }) {
     const local = FOOD_DB.filter(matchFn).slice(0, 4);
     setSuggestions([...mine, ...local.map(f => ({ ...f, source: "database" }))]);
 
-    // Debounced: USDA API + AI fallback
+    // Debounced: Gemini multi-result search (or AI single-item fallback)
     debounceRef.current = setTimeout(async () => {
+      if (local.length >= 4) return; // local results are sufficient
+      const aiKey = getGeminiKey() || getClaudeKey();
+      if (!aiKey) return; // no key — just show local results
       setAiLoading(true);
       try {
-        // ── Open Food Facts — 3M+ products, international brands ──────────────
-        const offCtrl = new AbortController();
-        const offTimer = setTimeout(() => offCtrl.abort(), 10000);
-        let offFoods = [];
-        try {
-          const offRes = await fetch(
-            `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&json=1&page_size=8&search_simple=1&action=process&fields=product_name,brands,serving_size,nutriments`,
-            { signal: offCtrl.signal }
+        const geminiKey = getGeminiKey();
+        let aiFoods = [];
+        if (geminiKey) {
+          // Ask Gemini for multiple matching foods at once
+          const prompt = `List up to 6 foods that best match the search: "${query}".
+Include generic foods, branded products, and regional variants.
+Return ONLY a JSON array, no markdown. Each item:
+{"name":"...","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"serving":"..."}
+Per-serving values. Numbers only (no units in values). Fiber 0 if unknown.`;
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+            { method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) }
           );
-          clearTimeout(offTimer);
-          const offData = await offRes.json();
-          offFoods = (offData.products || []).map(p => {
-            const n = p.nutriments || {};
-            const servingG = parseFloat(p.serving_size) || 100;
-            const scale = servingG / 100;
-            const cal100 = n["energy-kcal_100g"] || n["energy-kcal"] || 0;
-            if (!cal100) return null;
-            const brand = p.brands ? `(${p.brands.split(",")[0].trim()}) ` : "";
-            return {
-              name: `${p.product_name || "Unknown"} ${brand}`.trim(),
-              calories: Math.round(cal100 * scale),
-              protein: Math.round((n["proteins_100g"] || 0) * scale * 10) / 10,
-              carbs: Math.round((n["carbohydrates_100g"] || 0) * scale * 10) / 10,
-              fat: Math.round((n["fat_100g"] || 0) * scale * 10) / 10,
-              fiber: Math.round((n["fiber_100g"] || 0) * scale * 10) / 10,
-              serving: p.serving_size || "100g",
-              source: "off"
-            };
-          }).filter(Boolean).filter(f => f.calories > 0 && f.name.length > 1).slice(0, 6);
-        } catch { clearTimeout(offTimer); }
-
-        setSuggestions(prev => {
-          const combined = [...prev, ...offFoods];
-          const seen = new Set();
-          return combined.filter(f => {
-            const key = f.name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20);
-            if (seen.has(key)) return false;
-            seen.add(key); return true;
-          }).slice(0, 8);
-        });
-
-        // ── AI fallback only if Open Food Facts + local both thin ──────────
-        if (offFoods.length < 2 && local.length < 2 && query.length > 3) {
+          if (res.ok) {
+            const data = await res.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            try {
+              const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+              aiFoods = (Array.isArray(parsed) ? parsed : [parsed])
+                .filter(f => f && f.calories > 0)
+                .map(f => ({ ...f, source: "ai" }));
+            } catch {}
+          }
+        } else {
+          // Claude fallback — single item
           const r = await analyzeFood(`Food item: "${query}". Accurate nutritional info per standard serving.`);
-          if (r) setSuggestions(prev => [{ ...r, source: "ai" }, ...prev].slice(0, 8));
+          if (r) aiFoods = [{ ...r, source: "ai" }];
+        }
+
+        if (aiFoods.length > 0) {
+          setSuggestions(prev => {
+            const combined = [...prev, ...aiFoods];
+            const seen = new Set();
+            return combined.filter(f => {
+              const key = f.name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 22);
+              if (seen.has(key)) return false;
+              seen.add(key); return true;
+            }).slice(0, 8);
+          });
         }
       } catch {}
       setAiLoading(false);
