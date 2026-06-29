@@ -302,19 +302,51 @@ const FOOD_JSON_SYS = `You are a precise nutritional database. Respond ONLY with
 Format: {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"serving":"...","confidence":"high|medium|low","notes":"..."}
 All numbers are per serving. Protein/carbs/fat/fiber in grams. Always include fiber even if 0.`;
 
-async function analyzeFoodGemini(prompt, imageBase64) {
-  const key = getGeminiKey();
-  const parts = imageBase64
-    ? [{ inline_data: { mime_type: "image/jpeg", data: imageBase64 } }, { text: FOOD_JSON_SYS + "\n\n" + prompt }]
-    : [{ text: FOOD_JSON_SYS + "\n\n" + prompt }];
+// Auto-detect the best available Gemini model for this key
+async function getGeminiModel(key) {
+  const cached = sessionStorage.getItem("nt_gemini_model");
+  if (cached) return cached;
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${key}`);
+    const d = await r.json();
+    const names = (d.models || [])
+      .filter(m => m.supportedGenerationMethods?.includes("generateContent"))
+      .map(m => m.name.replace("models/", ""));
+    // Prefer flash models in order
+    const preferred = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-flash-latest",
+      "gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.0-pro", "gemini-pro"];
+    const picked = preferred.find(p => names.includes(p)) || names[0] || "gemini-1.5-flash";
+    sessionStorage.setItem("nt_gemini_model", picked);
+    return picked;
+  } catch { return "gemini-1.5-flash"; }
+}
+
+async function geminiGenerate(key, model, parts) {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${key}`,
+    `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${key}`,
     { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contents: [{ parts }] }) }
   );
-  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `Gemini error ${res.status}`); }
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    const msg = e.error?.message || `Gemini error ${res.status}`;
+    // Give a clearer message for the common quota=0 / wrong key source issue
+    if (msg.includes("limit: 0") || msg.includes("free_tier")) {
+      throw new Error("Your Gemini key has no free quota. Please create a new key at aistudio.google.com/apikey (not Google Cloud Console) and update it in Settings.");
+    }
+    throw new Error(msg);
+  }
   const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+}
+
+async function analyzeFoodGemini(prompt, imageBase64) {
+  const key = getGeminiKey();
+  const model = await getGeminiModel(key);
+  const parts = imageBase64
+    ? [{ inline_data: { mime_type: "image/jpeg", data: imageBase64 } }, { text: FOOD_JSON_SYS + "\n\n" + prompt }]
+    : [{ text: FOOD_JSON_SYS + "\n\n" + prompt }];
+  const text = await geminiGenerate(key, model, parts);
   try { return JSON.parse(text.replace(/```json|```/g, "").trim()); } catch { return null; }
 }
 
@@ -895,14 +927,9 @@ Include generic foods, branded products, and regional variants.
 Return ONLY a JSON array, no markdown. Each item:
 {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"serving":"..."}
 Per-serving values. Numbers only (no units in values). Fiber 0 if unknown.`;
-          const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-            { method: "POST", headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) }
-          );
-          if (res.ok) {
-            const data = await res.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          const model = await getGeminiModel(geminiKey);
+          const text = await geminiGenerate(geminiKey, model, [{ text: prompt }]).catch(() => "");
+          if (text) {
             try {
               const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
               aiFoods = (Array.isArray(parsed) ? parsed : [parsed])
@@ -1351,12 +1378,8 @@ ${todayFoodSummary}
         const sys = buildSystemPrompt();
         const parts = newMessages.map(m => ({ text: (m.role === "user" ? "User: " : "Assistant: ") + m.content }));
         parts.unshift({ text: "SYSTEM INSTRUCTIONS:\n" + sys + "\n\nConversation:" });
-        const gRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts }] }) }
-        );
-        const gData = await gRes.json();
-        reply = gData.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't respond.";
+        const model = await getGeminiModel(geminiKey);
+        reply = await geminiGenerate(geminiKey, model, parts).catch(e => "Sorry: " + e.message);
       } else {
         const res = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
