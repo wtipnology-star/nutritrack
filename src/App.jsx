@@ -663,6 +663,74 @@ function SetupScreen({ onComplete }) {
       ),
       canNext: () => true,
     },
+    {
+      title: "Backup & Restore", subtitle: "Keep your data safe across devices",
+      content: (() => {
+        const lastBackup = localStorage.getItem("nt_last_backup");
+        const lastBackupStr = lastBackup
+          ? new Date(parseInt(lastBackup)).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+          : "Never";
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ padding: "12px 14px", background: "rgba(20,184,166,.06)", border: "1px solid rgba(20,184,166,.2)", borderRadius: 10, fontSize: 12, lineHeight: 1.8, color: C.textMuted }}>
+              💾 Your data (logs, weight, profile, My Foods) is stored on this device only.<br/>
+              Export a backup file to keep a copy or move to a new device.
+            </div>
+            {/* Export */}
+            <div>
+              <div style={{ fontSize: 12, color: C.textDim, marginBottom: 8 }}>Last backup: <strong style={{ color: lastBackup ? C.teal : C.amber }}>{lastBackupStr}</strong></div>
+              <button className="btn-primary" style={{ width: "100%" }} onClick={() => {
+                const data = {
+                  version: 1, exportedAt: new Date().toISOString(),
+                  profile: JSON.parse(localStorage.getItem("nt_profile") || "null"),
+                  logs: JSON.parse(localStorage.getItem("nt_logs") || "{}"),
+                  dayTypes: JSON.parse(localStorage.getItem("nt_day_types") || "{}"),
+                  weightHistory: JSON.parse(localStorage.getItem("nt_weight_history") || "[]"),
+                  myFoods: JSON.parse(localStorage.getItem("nt_my_foods") || "[]"),
+                };
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a"); a.href = url;
+                a.download = `nutritrack-backup-${new Date().toISOString().split("T")[0]}.json`;
+                a.click(); URL.revokeObjectURL(url);
+                localStorage.setItem("nt_last_backup", Date.now().toString());
+              }}>💾 Download Backup</button>
+            </div>
+            {/* Import */}
+            <div>
+              <div style={{ fontSize: 12, color: C.textDim, marginBottom: 8 }}>Restore from a previous backup file:</div>
+              <label style={{ display: "block", padding: "12px 16px", background: C.bg, border: `1px dashed ${C.border}`, borderRadius: 10, textAlign: "center", cursor: "pointer", fontSize: 13, color: C.textMuted }}>
+                📂 Choose backup file to restore
+                <input type="file" accept=".json" style={{ display: "none" }} onChange={e => {
+                  const file = e.target.files?.[0]; if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = ev => {
+                    try {
+                      const data = JSON.parse(ev.target.result);
+                      if (!data.version || !data.profile) { alert("Invalid backup file."); return; }
+                      if (window.confirm(`Restore backup from ${data.exportedAt?.split("T")[0]}? This will replace your current data.`)) {
+                        if (data.profile) localStorage.setItem("nt_profile", JSON.stringify(data.profile));
+                        if (data.logs) localStorage.setItem("nt_logs", JSON.stringify(data.logs));
+                        if (data.dayTypes) localStorage.setItem("nt_day_types", JSON.stringify(data.dayTypes));
+                        if (data.weightHistory) localStorage.setItem("nt_weight_history", JSON.stringify(data.weightHistory));
+                        if (data.myFoods) localStorage.setItem("nt_my_foods", JSON.stringify(data.myFoods));
+                        localStorage.setItem("nt_last_backup", Date.now().toString());
+                        window.location.reload();
+                      }
+                    } catch { alert("Could not read backup file."); }
+                  };
+                  reader.readAsText(file);
+                }} />
+              </label>
+            </div>
+            <div style={{ fontSize: 11, color: C.textDim, textAlign: "center", lineHeight: 1.6 }}>
+              The app will remind you to back up every 24 hours.
+            </div>
+          </div>
+        );
+      })(),
+      canNext: () => true,
+    },
   ];
 
   const cur = steps[step];
@@ -1427,6 +1495,51 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("today");
   const [showModal, setShowModal] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [showBackupReminder, setShowBackupReminder] = useState(() => {
+    const last = localStorage.getItem("nt_last_backup");
+    if (!last) return true; // never backed up
+    return (Date.now() - parseInt(last)) > 24 * 60 * 60 * 1000;
+  });
+
+  // ── Backup helpers ──────────────────────────────────────────────────────────
+  const exportBackup = () => {
+    const data = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      profile: JSON.parse(localStorage.getItem("nt_profile") || "null"),
+      logs: JSON.parse(localStorage.getItem("nt_logs") || "{}"),
+      dayTypes: JSON.parse(localStorage.getItem("nt_day_types") || "{}"),
+      weightHistory: JSON.parse(localStorage.getItem("nt_weight_history") || "[]"),
+      myFoods: JSON.parse(localStorage.getItem("nt_my_foods") || "[]"),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `nutritrack-backup-${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    localStorage.setItem("nt_last_backup", Date.now().toString());
+    setShowBackupReminder(false);
+  };
+
+  const importBackup = (file) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data.version || !data.profile) { alert("Invalid backup file."); return; }
+        if (data.profile) localStorage.setItem("nt_profile", JSON.stringify(data.profile));
+        if (data.logs) localStorage.setItem("nt_logs", JSON.stringify(data.logs));
+        if (data.dayTypes) localStorage.setItem("nt_day_types", JSON.stringify(data.dayTypes));
+        if (data.weightHistory) localStorage.setItem("nt_weight_history", JSON.stringify(data.weightHistory));
+        if (data.myFoods) localStorage.setItem("nt_my_foods", JSON.stringify(data.myFoods));
+        localStorage.setItem("nt_last_backup", Date.now().toString());
+        window.location.reload();
+      } catch { alert("Could not read backup file. Make sure it's a valid NutriTrack backup."); }
+    };
+    reader.readAsText(file);
+  };
 
   const todayKey = new Date().toISOString().split("T")[0];
   const todayLog = logs[todayKey] || [];
@@ -1505,6 +1618,19 @@ export default function App() {
     <>
       <style>{css}</style>
 
+      {/* Daily backup reminder */}
+      {showBackupReminder && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 201, background: "#1e293b", borderBottom: "1px solid rgba(20,184,166,.3)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ fontSize: 12, color: C.textMuted, lineHeight: 1.4 }}>
+            <span style={{ color: C.amber }}>💾</span> <strong style={{ color: C.text }}>Daily backup due</strong> — save your data before switching devices
+          </div>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button onClick={exportBackup} style={{ background: C.teal, color: "#000", border: "none", borderRadius: 7, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "Inter,sans-serif" }}>Back Up</button>
+            <button onClick={() => setShowBackupReminder(false)} style={{ background: "transparent", color: C.textMuted, border: "none", padding: "6px 8px", cursor: "pointer", fontSize: 16, fontFamily: "Inter,sans-serif" }}>×</button>
+          </div>
+        </div>
+      )}
+
       {notification && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 200, background: notification.type === "success" ? C.green : C.teal, color: "#000", padding: "12px 16px", fontSize: 13, fontWeight: 500, animation: "slideIn .3s ease" }}>
           {notification.msg}
@@ -1514,7 +1640,7 @@ export default function App() {
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "16px 16px 100px" }}>
 
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingTop: notification ? 44 : 0, transition: "padding .3s" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingTop: (notification || showBackupReminder) ? 48 : 0, transition: "padding .3s" }}>
           <div>
             <div style={{ fontSize: 21, fontWeight: 700 }}>{greeting}, {profile.name?.split(" ")[0] || "there"} 👋</div>
             <div style={{ fontSize: 12, color: C.textMuted }}>
