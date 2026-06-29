@@ -297,6 +297,7 @@ function calcProfileTargets(w, h, a, sex, activity, deficit, onMounjaro) {
 
 function getClaudeKey() { return localStorage.getItem("nt_claude_key") || ""; }
 function getGeminiKey() { return localStorage.getItem("nt_gemini_key") || ""; }
+function getGroqKey() { return localStorage.getItem("nt_groq_key") || ""; }
 
 const FOOD_JSON_SYS = `You are a precise nutritional database. Respond ONLY with valid JSON, no markdown, no extra text.
 Format: {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"serving":"...","confidence":"high|medium|low","notes":"..."}
@@ -366,11 +367,39 @@ async function analyzeFoodClaude(prompt, imageBase64) {
   try { return JSON.parse(text.replace(/```json|```/g, "").trim()); } catch { return null; }
 }
 
+// Groq — free tier, no billing required, supports vision via llama-4
+async function analyzeGroq(prompt, imageBase64) {
+  const key = getGroqKey();
+  const model = imageBase64
+    ? "meta-llama/llama-4-scout-17b-16e-instruct"
+    : "llama-3.3-70b-versatile";
+  const userContent = imageBase64
+    ? [
+        { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageBase64}` } },
+        { type: "text", text: FOOD_JSON_SYS + "\n\n" + prompt }
+      ]
+    : FOOD_JSON_SYS + "\n\n" + prompt;
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+    body: JSON.stringify({ model, messages: [{ role: "user", content: userContent }], max_tokens: 1000 })
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error?.message || `Groq error ${res.status}`);
+  }
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content || "";
+  try { return JSON.parse(text.replace(/```json|```/g, "").trim()); } catch { return null; }
+}
+
 async function analyzeFood(prompt, imageBase64) {
+  const groqKey = getGroqKey();
   const geminiKey = getGeminiKey();
   const claudeKey = getClaudeKey();
-  if (!geminiKey && !claudeKey) throw new Error("NO_KEY");
-  // Prefer Gemini (free), fall back to Claude
+  if (!groqKey && !geminiKey && !claudeKey) throw new Error("NO_KEY");
+  // Groq first (free, no billing), then Gemini, then Claude
+  if (groqKey) return analyzeGroq(prompt, imageBase64);
   if (geminiKey) return analyzeFoodGemini(prompt, imageBase64);
   return analyzeFoodClaude(prompt, imageBase64);
 }
@@ -519,9 +548,11 @@ function SetupScreen({ onComplete }) {
   const [f, setF] = useState({ name: "", weight: "", height: "", age: "", sex: "male", activity: "sedentary", onMounjaro: true, mounjaroStartDate: "", targetCalorieDeficit: "500" });
   const [claudeKey, setClaudeKey] = useState(() => localStorage.getItem("nt_claude_key") || "");
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem("nt_gemini_key") || "");
+  const [groqKey, setGroqKey] = useState(() => localStorage.getItem("nt_groq_key") || "");
   const up = (k, v) => setF(prev => ({ ...prev, [k]: v }));
   const saveClaudeKey = (v) => { setClaudeKey(v); localStorage.setItem("nt_claude_key", v.trim()); };
   const saveGeminiKey = (v) => { setGeminiKey(v); localStorage.setItem("nt_gemini_key", v.trim()); };
+  const saveGroqKey = (v) => { setGroqKey(v); localStorage.setItem("nt_groq_key", v.trim()); };
 
   const getTargets = () => calcProfileTargets(parseFloat(f.weight), parseFloat(f.height), parseFloat(f.age), f.sex, f.activity, f.targetCalorieDeficit, f.onMounjaro);
 
@@ -665,14 +696,26 @@ function SetupScreen({ onComplete }) {
       title: "AI API Key", subtitle: "Powers photo scanning & AI chat",
       content: (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {/* Gemini — recommended (free) */}
-          <div style={{ padding: "12px 14px", background: "rgba(20,184,166,.06)", border: `1px solid ${geminiKey ? C.teal : "rgba(20,184,166,.2)"}`, borderRadius: 10 }}>
+          {/* Groq — top recommended, truly free */}
+          <div style={{ padding: "12px 14px", background: "rgba(20,184,166,.08)", border: `1px solid ${groqKey ? C.teal : "rgba(20,184,166,.3)"}`, borderRadius: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.teal, marginBottom: 6 }}>
-              🟢 Google Gemini <span style={{ fontSize: 11, fontWeight: 400, color: C.textDim }}>(Free — recommended)</span>
+              🚀 Groq <span style={{ fontSize: 11, fontWeight: 400, color: C.textDim }}>(100% Free · No billing ever · Recommended)</span>
             </div>
             <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8, lineHeight: 1.6 }}>
-              1,500 free scans/day · No credit card needed<br/>
-              Get key: <strong style={{ color: C.teal }}>aistudio.google.com/apikey</strong>
+              Free forever · No credit card · Works everywhere<br/>
+              Get key: <strong style={{ color: C.teal }}>console.groq.com</strong> → API Keys
+            </div>
+            <input className="input" type="password" placeholder="gsk_…"
+              value={groqKey} onChange={e => saveGroqKey(e.target.value)} />
+            {groqKey && <div style={{ fontSize: 11, color: C.teal, marginTop: 6 }}>✓ Groq key saved</div>}
+          </div>
+          {/* Gemini — alternative */}
+          <div style={{ padding: "12px 14px", background: C.bg, border: `1px solid ${geminiKey ? C.teal : C.border}`, borderRadius: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 6 }}>
+              Google Gemini <span style={{ fontSize: 11, fontWeight: 400, color: C.textDim }}>(Free tier — used if no Groq key)</span>
+            </div>
+            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8, lineHeight: 1.6 }}>
+              Get key: <strong>aistudio.google.com/apikey</strong>
             </div>
             <input className="input" type="password" placeholder="AIza…"
               value={geminiKey} onChange={e => saveGeminiKey(e.target.value)} />
@@ -681,7 +724,7 @@ function SetupScreen({ onComplete }) {
           {/* Claude — paid fallback */}
           <div style={{ padding: "12px 14px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 6 }}>
-              Claude (Anthropic) <span style={{ fontSize: 11, fontWeight: 400, color: C.textDim }}>(Paid, used if no Gemini key)</span>
+              Claude (Anthropic) <span style={{ fontSize: 11, fontWeight: 400, color: C.textDim }}>(Paid)</span>
             </div>
             <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>
               Get key: <strong>console.anthropic.com</strong> → API Keys
@@ -911,24 +954,40 @@ function AddFoodModal({ onAdd, onClose }) {
     const local = FOOD_DB.filter(matchFn).slice(0, 4);
     setSuggestions([...mine, ...local.map(f => ({ ...f, source: "database" }))]);
 
-    // Debounced: Gemini multi-result search (or AI single-item fallback)
+    // Debounced: AI multi-result search (Groq → Gemini → Claude)
     debounceRef.current = setTimeout(async () => {
       if (local.length >= 4) return; // local results are sufficient
-      const aiKey = getGeminiKey() || getClaudeKey();
+      const aiKey = getGroqKey() || getGeminiKey() || getClaudeKey();
       if (!aiKey) return; // no key — just show local results
       setAiLoading(true);
       try {
+        const groqKey = getGroqKey();
         const geminiKey = getGeminiKey();
         let aiFoods = [];
-        if (geminiKey) {
-          // Ask Gemini for multiple matching foods at once
-          const prompt = `List up to 6 foods that best match the search: "${query}".
+        const multiPrompt = `List up to 6 foods that best match the search: "${query}".
 Include generic foods, branded products, and regional variants.
 Return ONLY a JSON array, no markdown. Each item:
 {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"serving":"..."}
 Per-serving values. Numbers only (no units in values). Fiber 0 if unknown.`;
+        if (groqKey) {
+          const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${groqKey}` },
+            body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "user", content: multiPrompt }], max_tokens: 800 })
+          }).catch(() => null);
+          if (res && res.ok) {
+            const d = await res.json().catch(() => ({}));
+            const text = d.choices?.[0]?.message?.content || "";
+            try {
+              const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+              aiFoods = (Array.isArray(parsed) ? parsed : [parsed])
+                .filter(f => f && f.calories > 0).map(f => ({ ...f, source: "ai" }));
+            } catch {}
+          }
+        } else if (geminiKey) {
+          // Ask Gemini for multiple matching foods at once
           const model = await getGeminiModel(geminiKey);
-          const text = await geminiGenerate(geminiKey, model, [{ text: prompt }]).catch(() => "");
+          const text = await geminiGenerate(geminiKey, model, [{ text: multiPrompt }]).catch(() => "");
           if (text) {
             try {
               const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
@@ -1047,10 +1106,10 @@ Per-serving values. Numbers only (no units in values). Fiber 0 if unknown.`;
             {tab === "photo" && (
               <div>
                 {/* No API key warning */}
-                {!getClaudeKey() && !getGeminiKey() && (
+                {!getClaudeKey() && !getGeminiKey() && !getGroqKey() && (
                   <div style={{ marginBottom: 14, padding: "12px 14px", background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.3)", borderRadius: 10, fontSize: 12, lineHeight: 1.7, color: C.textMuted }}>
                     ⚠️ <strong style={{ color: C.red }}>API key required</strong> for photo analysis.<br/>
-                    Tap <strong>Settings</strong> → add a free <strong style={{ color: C.teal }}>Google Gemini key</strong> (aistudio.google.com/apikey).
+                    Tap <strong>Settings</strong> → add a free <strong style={{ color: C.teal }}>Groq key</strong> (console.groq.com) — no billing needed.
                   </div>
                 )}
                 {/* API / analysis error */}
@@ -1370,11 +1429,22 @@ ${todayFoodSummary}
     setLoading(true);
 
     try {
+      const groqKey = getGroqKey();
       const geminiKey = getGeminiKey();
       const claudeKey = getClaudeKey();
-      if (!geminiKey && !claudeKey) throw new Error("NO_KEY");
+      if (!groqKey && !geminiKey && !claudeKey) throw new Error("NO_KEY");
       let reply = "";
-      if (geminiKey) {
+      if (groqKey) {
+        const sys = buildSystemPrompt();
+        const msgs = [{ role: "system", content: sys }, ...newMessages.map(m => ({ role: m.role, content: m.content }))];
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${groqKey}` },
+          body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: msgs, max_tokens: 1000 })
+        });
+        const d = await res.json();
+        reply = d.choices?.[0]?.message?.content || "Sorry, I couldn't respond.";
+      } else if (geminiKey) {
         const sys = buildSystemPrompt();
         const parts = newMessages.map(m => ({ text: (m.role === "user" ? "User: " : "Assistant: ") + m.content }));
         parts.unshift({ text: "SYSTEM INSTRUCTIONS:\n" + sys + "\n\nConversation:" });
@@ -1671,9 +1741,9 @@ export default function App() {
               {profile.onMounjaro && <span style={{ color: C.purple, marginLeft: 8 }}>· Week {getMounjaroWeek(profile.mounjaroStartDate)} 💉</span>}
             </div>
           </div>
-          <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 10px", borderColor: (!getClaudeKey() && !getGeminiKey()) ? "rgba(245,158,11,.5)" : undefined, color: (!getClaudeKey() && !getGeminiKey()) ? C.amber : undefined }}
+          <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 10px", borderColor: (!getClaudeKey() && !getGeminiKey() && !getGroqKey()) ? "rgba(245,158,11,.5)" : undefined, color: (!getClaudeKey() && !getGeminiKey() && !getGroqKey()) ? C.amber : undefined }}
             onClick={() => setProfile(null)}>
-            {(!getClaudeKey() && !getGeminiKey()) ? "🔑 Add API Key" : "⚙ Settings"}
+            {(!getClaudeKey() && !getGeminiKey() && !getGroqKey()) ? "🔑 Add API Key" : "⚙ Settings"}
           </button>
         </div>
 
