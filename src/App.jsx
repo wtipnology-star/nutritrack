@@ -277,30 +277,51 @@ function calcProfileTargets(w, h, a, sex, activity, deficit, onMounjaro) {
 }
 
 function getClaudeKey() { return localStorage.getItem("nt_claude_key") || ""; }
+function getGeminiKey() { return localStorage.getItem("nt_gemini_key") || ""; }
 
-async function analyzeFood(prompt, imageBase64) {
+const FOOD_JSON_SYS = `You are a precise nutritional database. Respond ONLY with valid JSON, no markdown, no extra text.
+Format: {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"serving":"...","confidence":"high|medium|low","notes":"..."}
+All numbers are per serving. Protein/carbs/fat/fiber in grams. Always include fiber even if 0.`;
+
+async function analyzeFoodGemini(prompt, imageBase64) {
+  const key = getGeminiKey();
+  const parts = imageBase64
+    ? [{ inline_data: { mime_type: "image/jpeg", data: imageBase64 } }, { text: FOOD_JSON_SYS + "\n\n" + prompt }]
+    : [{ text: FOOD_JSON_SYS + "\n\n" + prompt }];
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+    { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contents: [{ parts }] }) }
+  );
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `Gemini error ${res.status}`); }
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  try { return JSON.parse(text.replace(/```json|```/g, "").trim()); } catch { return null; }
+}
+
+async function analyzeFoodClaude(prompt, imageBase64) {
   const key = getClaudeKey();
-  if (!key) throw new Error("NO_KEY");
   const content = imageBase64
     ? [{ type: "image", source: { type: "base64", media_type: "image/jpeg", data: imageBase64 } }, { type: "text", text: prompt }]
     : prompt;
-  const sys = `You are a precise nutritional database. Respond ONLY with valid JSON, no markdown, no extra text.
-Format: {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"serving":"...","confidence":"high|medium|low","notes":"..."}
-All numbers are per serving. Protein/carbs/fat/fiber in grams. Always include fiber even if 0.`;
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1000, system: sys, messages: [{ role: "user", content }] }),
+    headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+    body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1000, system: FOOD_JSON_SYS, messages: [{ role: "user", content }] }),
   });
   if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error?.message || `API error ${res.status}`); }
   const data = await res.json();
   const text = data.content.map(b => b.text || "").join("");
   try { return JSON.parse(text.replace(/```json|```/g, "").trim()); } catch { return null; }
+}
+
+async function analyzeFood(prompt, imageBase64) {
+  const geminiKey = getGeminiKey();
+  const claudeKey = getClaudeKey();
+  if (!geminiKey && !claudeKey) throw new Error("NO_KEY");
+  // Prefer Gemini (free), fall back to Claude
+  if (geminiKey) return analyzeFoodGemini(prompt, imageBase64);
+  return analyzeFoodClaude(prompt, imageBase64);
 }
 
 function detectMealType() {
@@ -446,8 +467,10 @@ function SetupScreen({ onComplete }) {
   const [step, setStep] = useState(0);
   const [f, setF] = useState({ name: "", weight: "", height: "", age: "", sex: "male", activity: "sedentary", onMounjaro: true, mounjaroStartDate: "", targetCalorieDeficit: "500" });
   const [claudeKey, setClaudeKey] = useState(() => localStorage.getItem("nt_claude_key") || "");
+  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem("nt_gemini_key") || "");
   const up = (k, v) => setF(prev => ({ ...prev, [k]: v }));
-  const saveKey = (v) => { setClaudeKey(v); localStorage.setItem("nt_claude_key", v.trim()); };
+  const saveClaudeKey = (v) => { setClaudeKey(v); localStorage.setItem("nt_claude_key", v.trim()); };
+  const saveGeminiKey = (v) => { setGeminiKey(v); localStorage.setItem("nt_gemini_key", v.trim()); };
 
   const getTargets = () => calcProfileTargets(parseFloat(f.weight), parseFloat(f.height), parseFloat(f.age), f.sex, f.activity, f.targetCalorieDeficit, f.onMounjaro);
 
@@ -588,32 +611,35 @@ function SetupScreen({ onComplete }) {
       canNext: () => true,
     },
     {
-      title: "Claude API Key", subtitle: "Powers photo scanning & AI chat",
+      title: "AI API Key", subtitle: "Powers photo scanning & AI chat",
       content: (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ padding: "12px 14px", background: "rgba(20,184,166,.06)", border: "1px solid rgba(20,184,166,.2)", borderRadius: 10, fontSize: 12, lineHeight: 1.8, color: C.textMuted }}>
-            🤖 NutriTrack uses Claude AI to:<br/>
-            • <strong style={{ color: C.text }}>Scan nutrition labels</strong> from photos<br/>
-            • <strong style={{ color: C.text }}>AI chat</strong> for personalised advice<br/>
-            • <strong style={{ color: C.text }}>Look up foods</strong> not in the database
+          {/* Gemini — recommended (free) */}
+          <div style={{ padding: "12px 14px", background: "rgba(20,184,166,.06)", border: `1px solid ${geminiKey ? C.teal : "rgba(20,184,166,.2)"}`, borderRadius: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.teal, marginBottom: 6 }}>
+              🟢 Google Gemini <span style={{ fontSize: 11, fontWeight: 400, color: C.textDim }}>(Free — recommended)</span>
+            </div>
+            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8, lineHeight: 1.6 }}>
+              1,500 free scans/day · No credit card needed<br/>
+              Get key: <strong style={{ color: C.teal }}>aistudio.google.com/apikey</strong>
+            </div>
+            <input className="input" type="password" placeholder="AIza…"
+              value={geminiKey} onChange={e => saveGeminiKey(e.target.value)} />
+            {geminiKey && <div style={{ fontSize: 11, color: C.teal, marginTop: 6 }}>✓ Gemini key saved</div>}
           </div>
-          <div>
-            <label style={{ fontSize: 12, color: C.textMuted, display: "block", marginBottom: 6 }}>
-              Your Claude API Key <span style={{ color: C.textDim }}>(stored only on this device)</span>
-            </label>
+          {/* Claude — paid fallback */}
+          <div style={{ padding: "12px 14px", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.textMuted, marginBottom: 6 }}>
+              Claude (Anthropic) <span style={{ fontSize: 11, fontWeight: 400, color: C.textDim }}>(Paid, used if no Gemini key)</span>
+            </div>
+            <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>
+              Get key: <strong>console.anthropic.com</strong> → API Keys
+            </div>
             <input className="input" type="password" placeholder="sk-ant-api03-…"
-              value={claudeKey} onChange={e => saveKey(e.target.value)} />
-            {claudeKey && claudeKey.startsWith("sk-ant-") && (
-              <div style={{ fontSize: 11, color: C.teal, marginTop: 6 }}>✓ Key format looks correct</div>
-            )}
-            {claudeKey && !claudeKey.startsWith("sk-ant-") && (
-              <div style={{ fontSize: 11, color: C.amber, marginTop: 6 }}>⚠️ Keys usually start with sk-ant-</div>
-            )}
+              value={claudeKey} onChange={e => saveClaudeKey(e.target.value)} />
+            {claudeKey && <div style={{ fontSize: 11, color: C.teal, marginTop: 6 }}>✓ Claude key saved</div>}
           </div>
-          <div style={{ padding: "10px 12px", background: C.bg, borderRadius: 8, fontSize: 11, color: C.textDim, lineHeight: 1.7 }}>
-            Get a free key at <strong style={{ color: C.teal }}>console.anthropic.com</strong> → API Keys.<br/>
-            You can skip this and add it later from Settings.
-          </div>
+          <div style={{ fontSize: 11, color: C.textDim, textAlign: "center" }}>Keys are stored only on this device and never shared.</div>
         </div>
       ),
       canNext: () => true,
@@ -909,11 +935,10 @@ function AddFoodModal({ onAdd, onClose }) {
             {tab === "photo" && (
               <div>
                 {/* No API key warning */}
-                {!getClaudeKey() && (
+                {!getClaudeKey() && !getGeminiKey() && (
                   <div style={{ marginBottom: 14, padding: "12px 14px", background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.3)", borderRadius: 10, fontSize: 12, lineHeight: 1.7, color: C.textMuted }}>
-                    ⚠️ <strong style={{ color: C.red }}>Claude API key required</strong> for photo analysis.<br/>
-                    Go to <strong>Settings</strong> (⚙ top-right) → add your API key. Get one free at{" "}
-                    <span style={{ color: C.teal }}>console.anthropic.com</span>.
+                    ⚠️ <strong style={{ color: C.red }}>API key required</strong> for photo analysis.<br/>
+                    Tap <strong>Settings</strong> → add a free <strong style={{ color: C.teal }}>Google Gemini key</strong> (aistudio.google.com/apikey).
                   </div>
                 )}
                 {/* API / analysis error */}
@@ -1233,23 +1258,29 @@ ${todayFoodSummary}
     setLoading(true);
 
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": getClaudeKey(),
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 1000,
-          system: buildSystemPrompt(),
-          messages: newMessages.map(m => ({ role: m.role, content: m.content })),
-        }),
-      });
-      const data = await res.json();
-      const reply = data.content?.map(b => b.text || "").join("") || "Sorry, I couldn't respond. Please try again.";
+      const geminiKey = getGeminiKey();
+      const claudeKey = getClaudeKey();
+      if (!geminiKey && !claudeKey) throw new Error("NO_KEY");
+      let reply = "";
+      if (geminiKey) {
+        const sys = buildSystemPrompt();
+        const parts = newMessages.map(m => ({ text: (m.role === "user" ? "User: " : "Assistant: ") + m.content }));
+        parts.unshift({ text: "SYSTEM INSTRUCTIONS:\n" + sys + "\n\nConversation:" });
+        const gRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts }] }) }
+        );
+        const gData = await gRes.json();
+        reply = gData.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't respond.";
+      } else {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": claudeKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+          body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1000, system: buildSystemPrompt(), messages: newMessages.map(m => ({ role: m.role, content: m.content })) }),
+        });
+        const data = await res.json();
+        reply = data.content?.map(b => b.text || "").join("") || "Sorry, I couldn't respond. Please try again.";
+      }
       setMessages(prev => [...prev, { role: "assistant", content: reply }]);
     } catch {
       setMessages(prev => [...prev, { role: "assistant", content: "Something went wrong. Please check your connection and try again." }]);
@@ -1474,9 +1505,9 @@ export default function App() {
               {profile.onMounjaro && <span style={{ color: C.purple, marginLeft: 8 }}>· Week {getMounjaroWeek(profile.mounjaroStartDate)} 💉</span>}
             </div>
           </div>
-          <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 10px", borderColor: !getClaudeKey() ? "rgba(245,158,11,.5)" : undefined, color: !getClaudeKey() ? C.amber : undefined }}
+          <button className="btn-ghost" style={{ fontSize: 11, padding: "6px 10px", borderColor: (!getClaudeKey() && !getGeminiKey()) ? "rgba(245,158,11,.5)" : undefined, color: (!getClaudeKey() && !getGeminiKey()) ? C.amber : undefined }}
             onClick={() => setProfile(null)}>
-            {!getClaudeKey() ? "🔑 Add API Key" : "⚙ Settings"}
+            {(!getClaudeKey() && !getGeminiKey()) ? "🔑 Add API Key" : "⚙ Settings"}
           </button>
         </div>
 
