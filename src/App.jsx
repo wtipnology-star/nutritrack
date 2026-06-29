@@ -308,7 +308,7 @@ async function analyzeFoodGemini(prompt, imageBase64) {
     ? [{ inline_data: { mime_type: "image/jpeg", data: imageBase64 } }, { text: FOOD_JSON_SYS + "\n\n" + prompt }]
     : [{ text: FOOD_JSON_SYS + "\n\n" + prompt }];
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+    `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${key}`,
     { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contents: [{ parts }] }) }
   );
@@ -896,7 +896,7 @@ Return ONLY a JSON array, no markdown. Each item:
 {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0,"fiber":0,"serving":"..."}
 Per-serving values. Numbers only (no units in values). Fiber 0 if unknown.`;
           const res = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+            `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
             { method: "POST", headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) }
           );
@@ -1352,7 +1352,7 @@ ${todayFoodSummary}
         const parts = newMessages.map(m => ({ text: (m.role === "user" ? "User: " : "Assistant: ") + m.content }));
         parts.unshift({ text: "SYSTEM INSTRUCTIONS:\n" + sys + "\n\nConversation:" });
         const gRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+          `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
           { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts }] }) }
         );
         const gData = await gRes.json();
